@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import os
+from genomelake.extractors import ArrayExtractor
 
 DEFER_DELETE_SIZE=int(250 * 1e6)
 os.environ['CUDA_VISIBLE_DEVICES'] = str(0)
@@ -116,3 +117,17 @@ def information_matrix_pwms(pfm_counts_list):
             info_list.append(get_information_content_matrix(pfm_with_pseudocount(pfm)))
     return info_list
 
+def pfm_counts_pipeline(intervals_bedtool,genome_path,filters,biases,num_intervals):
+    genome_extractor = ArrayExtractor(genome_path)
+    print("Creating intervals list \n")
+    intervals_list = [intervals_bedtool[i] for i in range(num_intervals)]
+    extracted_intervals = genome_extractor(intervals_list)
+    assert extracted_intervals.shape[0] == num_intervals
+    assert extracted_intervals.shape[2] == filters.shape[1]   #Number of bases must match
+    print("Reshaping Intervals and filters to use tf.nn.conv2D")
+    extracted_intervals_reshape = np.expand_dims(extracted_intervals.transpose((0,2,1)),axis=-1)
+    filters_reshape = np.expand_dims(filters,axis=-1).transpose((1,0,3,2))
+    pfm_counts = get_counts_list(intervals=extracted_intervals_reshape,filters=filters_reshape,biases=biases)
+    info_matrices = information_matrix_pwms(pfm_counts)
+    return pfm_counts,info_matrices
+   
