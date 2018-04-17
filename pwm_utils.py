@@ -1,15 +1,20 @@
+####Keras version should be 1.2,2 for shapes to be consistent with this code. Keras 2 uses temsorflow conv1D as a backedn and the sjapesare different
+
 import numpy as np
 import tensorflow as tf
 import os
 from genomelake.extractors import ArrayExtractor
+import keras.backend as K
 
 DEFER_DELETE_SIZE=int(250 * 1e6)
-os.environ['CUDA_VISIBLE_DEVICES'] = str(0)
-session_config = tf.ConfigProto()
-session_config.gpu_options.deferred_deletion_bytes = DEFER_DELETE_SIZE
-session_config.gpu_options.per_process_gpu_memory_fraction = 0.45
-sess = tf.Session(config=session_config)
-
+def create_tensorflow_session(visiblegpus):
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(visiblegpus)
+    session_config = tf.ConfigProto()
+    session_config.gpu_options.deferred_deletion_bytes = DEFER_DELETE_SIZE
+    session_config.gpu_options.per_process_gpu_memory_fraction = 0.45
+    session = tf.Session(config=session_config)
+    K.set_session(session)
+    return session
 ###With methylation some of these things need to be redefined (maybe only normalize on the first 4 channels if m is treated as separate)
 
 def pwm(pfm):
@@ -25,7 +30,7 @@ def get_information_content_matrix(pfm):
     return pfm*np.log2(pfm/0.25)
 
 def activated_locations_with_filters(intervals,filters,biases):
-    #Calculates the locations that activate the relu after colvolution and bias
+    #Calculates the locations that activate the relu fter colvolution and bias
     
     #intervals shape = (batch_size,height,width,num_channels) ex. (None,4,101,1)   
     #filters shape = (height,width,input_channels,out_channels) ex . (4,24,1,16)
@@ -46,6 +51,7 @@ def activated_locations_with_filters(intervals,filters,biases):
     interval_width = intervals.shape[2]
     
     ##Define placeholder variables
+    sess = create_tensorflow_session(0)
     intervals_placeholder = tf.placeholder(shape=intervals.shape,dtype=tf.float32)
     filters_placeholder = tf.placeholder(shape=filters.shape,dtype=tf.float32)
     biases_placeholder = tf.placeholder(shape=biases.shape,dtype=tf.float32)
@@ -117,17 +123,83 @@ def information_matrix_pwms(pfm_counts_list):
             info_list.append(get_information_content_matrix(pfm_with_pseudocount(pfm)))
     return info_list
 
+
+#This pipeleine currently works just for seq only models
+
 def pfm_counts_pipeline(intervals_bedtool,genome_path,filters,biases,num_intervals):
     genome_extractor = ArrayExtractor(genome_path)
     print("Creating intervals list \n")
     intervals_list = [intervals_bedtool[i] for i in range(num_intervals)]
     extracted_intervals = genome_extractor(intervals_list)
     assert extracted_intervals.shape[0] == num_intervals
-    assert extracted_intervals.shape[2] == filters.shape[1]   #Number of bases must match
+    assert extracted_intervals.shape[2] == filters.shape[2]   #Number of bases must match
     print("Reshaping Intervals and filters to use tf.nn.conv2D")
     extracted_intervals_reshape = np.expand_dims(extracted_intervals.transpose((0,2,1)),axis=-1)
-    filters_reshape = np.expand_dims(filters,axis=-1).transpose((1,0,3,2))
+    filters_reshape = filters.transpose((2,0,1,3))
     pfm_counts = get_counts_list(intervals=extracted_intervals_reshape,filters=filters_reshape,biases=biases)
     info_matrices = information_matrix_pwms(pfm_counts)
     return pfm_counts,info_matrices
-   
+
+
+
+def pfm_counts_pipeline_seq_models(intervals_bedtool,genome_path,model,
+    conv_layer_name = 'conv_layer_1',num_intervals = 500,savedir=None):
+    genome_extractor = ArrayExtractor(genome_path)
+    print("Creating intervals list \n")
+    intervals_list = [intervals_bedtool[i] for i in range(num_intervals)]
+    extracted_intervals = genome_extractor(intervals_list)
+    assert extracted_intervals.shape[0] == num_intervals
+    try:
+        conv_layer = model.get_layer(conv_layer_name).get_weights()
+    except Exception as e:
+        print(e)
+        return
+    filters,biases = conv_layer[0],conv_layer[1]
+    assert extracted_intervals.shape[2] == filters.shape[2]   #Number of bases must match
+    print("Reshaping Intervals and filters to use tf.nn.conv2D")
+    extracted_intervals_reshape = np.expand_dims(extracted_intervals.transpose((0,2,1)),axis=-1)
+    filters_reshape = filters.transpose((2,0,1,3))
+    pfm_counts = get_counts_list(intervals=extracted_intervals_reshape,filters=filters_reshape,biases=biases)
+    info_matrices = information_matrix_pwms(pfm_counts)
+    if savedir:
+        save_pfm_counts(pfm_counts,savedir)
+        save_info_matrices(info_matrices,savedir) 
+    return pfm_counts,info_matrices
+
+
+def save_pfm_counts(counts_list,filepath):
+    counts = []
+    for i,item in enumerate(counts_list):
+        counts.append(item[1])
+        np.save(filepath+'/pfm_counts_arr%s.npy'%(str(i)),item[0])
+    counts_arr = np.array(counts)
+    np.save(filepath+'/pfm_counts.npy',counts_arr) 
+
+    print("Saved pfm counts to {}\n".format(filepath))
+       
+def save_info_matrices(info_list,filepath):
+    for i,item in enumerate(info_list):
+        np.save(filepath+'/info_matrix%s.npy'%(str(i)),item)
+
+             
+    print("Saved information content matrices to {} \n".format(filepath))
+
+
+##Plotting all information matrices : Default is the 4 channel DNA
+def plot_all_information_matrices(filepath,vocab='DNA'):
+    import glob
+    counts = 0
+    for filename in glob.glob(filepath+'/*'):
+        if 'info' in filename:
+	    counts+=1
+    if counts>0:
+        for i in range(counts):
+	    fig = seqlogo_fig(np.array(filepath+'/pfm_counts_arr{}.npy'.format(str(i)).transpose())
+            fig.savefig(filepath+'/info_pwm{}.png'.format(str(i)))
+		
+	        
+    
+
+
+
+
