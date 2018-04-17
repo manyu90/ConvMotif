@@ -171,11 +171,26 @@ VOCABS = {"DNA": OrderedDict([("A", "green"),
                                     ("I", "blue"),
                                     ("M", "orange"),
                                     ("E", "violet")]),
-          }
+         'Meth_6_channel': OrderedDict([("A", "green"),
+                          ("C", "blue"),
+                          ("G", "orange"),
+                          ("T", "red"),
+                          ("E", "black"),
+                          ("F", "purple")]),
+         'Meth_8_channel': OrderedDict([("A", "green"),
+                          ("C", "blue"),
+                          ("G", "orange"),
+                          ("T", "red"),
+                          ("E", "black"),
+                          ("F", "purple"),
+			  ("G", "pink"),
+			  ("H", "yellow")])
+         
+ }
 # make sure things are in order
-VOCABS["AA"] = OrderedDict((k, VOCABS["AA"][k]) for k in AMINO_ACIDS)
+#VOCABS["AA"] = OrderedDict((k, VOCABS["AA"][k]) for k in AMINO_ACIDS)
 VOCABS["DNA"] = OrderedDict((k, VOCABS["DNA"][k]) for k in DNA)
-VOCABS["RNA"] = OrderedDict((k, VOCABS["RNA"][k]) for k in RNA)
+#VOCABS["RNA"] = OrderedDict((k, VOCABS["RNA"][k]) for k in RNA)
 
 
 def add_letter_to_axis(ax, let, col, x, y, height):
