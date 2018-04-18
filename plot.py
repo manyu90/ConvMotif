@@ -135,6 +135,8 @@ def standardize_polygons_str(data_str):
 
 # ----------------------
 letter_polygons = {k: standardize_polygons_str(v) for k, v in all_letters.items()}
+#ENSURE THAT THE METHYLATION SYMBOLS AND NUCLEOTIDES ARE IN THE SAME ORDER AS THE ENCODING USED TO TRAIN THE MODELS
+#THE meth 8 channel vocab order needs to be checked!!
 
 VOCABS = {"DNA": OrderedDict([("A", "green"),
                               ("C", "blue"),
@@ -171,26 +173,24 @@ VOCABS = {"DNA": OrderedDict([("A", "green"),
                                     ("I", "blue"),
                                     ("M", "orange"),
                                     ("E", "violet")]),
-         'Meth_6_channel': OrderedDict([("A", "green"),
-                          ("C", "blue"),
-                          ("G", "orange"),
-                          ("T", "red"),
-                          ("E", "black"),
+         'Meth_6_channel': OrderedDict([("E", "black"),
+                          ("A", "blue"),
+                          ("C", "orange"),
+                          ("G", "red"),
+                          ("T", "green"),
                           ("F", "purple")]),
-         'Meth_8_channel': OrderedDict([("A", "green"),
-                          ("C", "blue"),
-                          ("G", "orange"),
-                          ("T", "red"),
-                          ("E", "black"),
-                          ("F", "purple"),
-			  ("G", "pink"),
-			  ("H", "yellow")])
+         'Meth_8_channel': OrderedDict([("E", "green"),
+                          ("G", "blue"),
+                          ("A", "orange"),
+                          ("C", "red"),
+                          ("G", "black"),
+                          ("T", "purple"),
+			  ("H", "pink"),
+			  ("F", "yellow")])
          
  }
 # make sure things are in order
-#VOCABS["AA"] = OrderedDict((k, VOCABS["AA"][k]) for k in AMINO_ACIDS)
 VOCABS["DNA"] = OrderedDict((k, VOCABS["DNA"][k]) for k in DNA)
-#VOCABS["RNA"] = OrderedDict((k, VOCABS["RNA"][k]) for k in RNA)
 
 
 def add_letter_to_axis(ax, let, col, x, y, height):

@@ -1,10 +1,22 @@
-####Keras version should be 1.2,2 for shapes to be consistent with this code. Keras 2 uses temsorflow conv1D as a backedn and the sjapesare different
+#!/bin/env python
+
+"""
+PWM utils to create pwms from Keras model conv filters.
+
+Keras version should be 1.2.2 for shapes to be consistent with this code. Keras 2 uses tensorflow conv1D as a backend and the shapes sare different
+The virtual environment used is pwm_utils (on the lab cluster. Need to create a setup.py file from this environment)
+"""
+
+# vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
+
 
 import numpy as np
 import tensorflow as tf
 import os
 from genomelake.extractors import ArrayExtractor
 import keras.backend as K
+from plot import seqlogo_fig
+import glob
 
 DEFER_DELETE_SIZE=int(250 * 1e6)
 def create_tensorflow_session(visiblegpus):
@@ -113,19 +125,24 @@ def get_counts_list(intervals,filters,biases):
     return get_motifs_from_activations(activated_locs,intervals,filters,biases)
 
 
-
 def information_matrix_pwms(pfm_counts_list):
     info_list=[]
     for elem in pfm_counts_list:
         pfm,counts=elem[0],elem[1]
+        start = (len(pfm)-4)/2
+        end  = start+4
+        pfm_seq = pfm[start:end,:]
         if counts>0:
             pfm/=(counts+0.0)
-            info_list.append(get_information_content_matrix(pfm_with_pseudocount(pfm)))
+            info_pwm = get_information_content_matrix(pfm_with_pseudocount(pfm_seq))
+            pfm[start:end,:] = info_pwm
+            info_list.append(pfm)
+
     return info_list
 
 
 #This pipeleine currently works just for seq only models
-
+#This function needs an input of filters and biases. Does not work directly with the model
 def pfm_counts_pipeline(intervals_bedtool,genome_path,filters,biases,num_intervals):
     genome_extractor = ArrayExtractor(genome_path)
     print("Creating intervals list \n")
@@ -149,6 +166,8 @@ def pfm_counts_pipeline_seq_models(intervals_bedtool,genome_path,model,
     intervals_list = [intervals_bedtool[i] for i in range(num_intervals)]
     extracted_intervals = genome_extractor(intervals_list)
     assert extracted_intervals.shape[0] == num_intervals
+    
+    #Get the conv layer from the name
     try:
         conv_layer = model.get_layer(conv_layer_name).get_weights()
     except Exception as e:
@@ -166,6 +185,39 @@ def pfm_counts_pipeline_seq_models(intervals_bedtool,genome_path,model,
         save_info_matrices(info_matrices,savedir) 
     return pfm_counts,info_matrices
 
+def pfm_counts_pipeline_seq_meth_5mC_models(intervals_bedtool,genome_path,methylation_path,model,
+    conv_layer_name = 'conv_layer_1',num_intervals = 500,savedir=None):
+    genome_extractor = ArrayExtractor(genome_path)   #shape should be (batch_size,1000,4) for example
+    meth_extractor = ArrayExtractor(methylation_path) #shape should be (batch_size,1000)  for examples
+    print("Creating intervals list \n")
+    intervals_list = [intervals_bedtool[i] for i in range(num_intervals)]
+    extracted_intervals_seq = genome_extractor(intervals_list)
+    extracted_intervals_meth = meth_extractor(intervals_list)
+    assert extracted_intervals_seq.shape[0] == num_intervals
+    assert extracted_intervals_meth.shape[0] == num_intervals
+    #Add in the steps to extract stranded methylation from this and generate the 6 channel intervals
+    c_locations = extracted_intervals_seq[:,:,1]
+    g_locations = extracted_intervals_seq[:,:,2]
+    c_meth = np.expand_dims(c_locations*extracted_intervals_meth,axis=-1)
+    g_meth = np.expand_dims(g_locations*extracted_intervals_meth,axis=-1)
+    seq_meth_input = np.concatenate([c_meth,extracted_intervals_seq,g_meth],axis=-1)    #shape should be (batch_size,1000,6). This is the same order as the input is fed to the neural net
+    #Get the conv layer from the name
+    try:
+        conv_layer = model.get_layer(conv_layer_name).get_weights()
+    except Exception as e:
+        print(e)
+        return
+    filters,biases = conv_layer[0],conv_layer[1]
+    assert seq_meth_input.shape[2] == filters.shape[2]   #Number of bases must match. Should be = 6
+    print("Reshaping Intervals and filters to use tf.nn.conv2D")
+    seq_meth_intervals_reshape = np.expand_dims(seq_meth_input.transpose((0,2,1)),axis=-1)
+    filters_reshape = filters.transpose((2,0,1,3))
+    pfm_counts = get_counts_list(intervals=seq_meth_intervals_reshape,filters=filters_reshape,biases=biases)
+    info_matrices = information_matrix_pwms(pfm_counts)
+    if savedir:
+        save_pfm_counts(pfm_counts,savedir)
+        save_info_matrices(info_matrices,savedir) 
+    return pfm_counts,info_matrices
 
 def save_pfm_counts(counts_list,filepath):
     counts = []
@@ -184,19 +236,24 @@ def save_info_matrices(info_list,filepath):
              
     print("Saved information content matrices to {} \n".format(filepath))
 
-
-##Plotting all information matrices : Default is the 4 channel DNA
-def plot_all_information_matrices(filepath,vocab='DNA'):
-    import glob
+"""
+Plotting all information matrices : Default is the 4 channel DNA
+Just change the VOCAB to get it to plot the other information matrices
+"""
+def plot_and_save_information_content_pwms(filepath,vocab='DNA'):
     counts = 0
-    for filename in glob.glob(filepath+'/*'):
-        if 'info' in filename:
-	    counts+=1
+    for filename in glob.glob(filepath+'/info_matrix*'):
+         counts+=1
+    
     if counts>0:
         for i in range(counts):
-	    fig = seqlogo_fig(np.array(filepath+'/pfm_counts_arr{}.npy'.format(str(i)).transpose())
-            fig.savefig(filepath+'/info_pwm{}.png'.format(str(i)))
-		
+            filename_ = os.path.abspath(filepath + '/info_matrix{}.npy'.format(str(i)))
+            arr_ = np.load(filename_).transpose()    #The plotting code expects the transposed shape
+            fig = seqlogo_fig(arr_,vocab=vocab)
+            fig_save_path = os.path.abspath(filepath + 'info_pwm{}.png'.format(str(i)))
+            fig.savefig(fig_save_path)
+    print("Saved all images to {}".format(filepath)) 		
+	
 	        
     
 
