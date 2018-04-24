@@ -250,7 +250,7 @@ def plot_and_save_information_content_pwms(filepath,vocab='DNA'):
             filename_ = os.path.abspath(filepath + '/info_matrix{}.npy'.format(str(i)))
             arr_ = np.load(filename_).transpose()    #The plotting code expects the transposed shape
             fig = seqlogo_fig(arr_,vocab=vocab)
-            fig_save_path = os.path.abspath(filepath + 'info_pwm{}.png'.format(str(i)))
+            fig_save_path = os.path.abspath(filepath + '/info_pwm{}.png'.format(str(i)))
             fig.savefig(fig_save_path)
     print("Saved all images to {}".format(filepath)) 		
 	
