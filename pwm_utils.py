@@ -219,6 +219,49 @@ def pfm_counts_pipeline_seq_meth_5mC_models(intervals_bedtool,genome_path,methyl
         save_info_matrices(info_matrices,savedir) 
     return pfm_counts,info_matrices
 
+def pfm_counts_pipeline_seq_AC_meth_models(intervals_bedtool,genome_path,C_methylation_path,A_methylation_path,model,
+    conv_layer_name = 'conv_layer_1',num_intervals = 500,savedir=None):
+    genome_extractor = ArrayExtractor(genome_path)   #shape should be (batch_size,1000,4) for example
+    C_meth_extractor = ArrayExtractor(C_methylation_path) #shape should be (batch_size,1000)  for examples
+    A_meth_extractor = ArrayExtractor(A_methylation_path) #shape should be (batcg_size,1000) for example  
+    print("Creating intervals list \n")
+    intervals_list = [intervals_bedtool[i] for i in range(num_intervals)]
+    extracted_intervals_seq = genome_extractor(intervals_list)
+    extracted_intervals_Cmeth = C_meth_extractor(intervals_list)
+    extracted_intervals_Ameth = A_meth_extractor(intervals_list)
+
+    assert extracted_intervals_seq.shape[0] == num_intervals
+    assert extracted_intervals_Cmeth.shape[0] == num_intervals 
+    assert extracted_intervals_Ameth.shape[0] == num_intervals  
+    #Add in the steps to extract stranded methylation from this and generate the 8 channel intervals
+    c_locations = extracted_intervals_seq[:,:,1]
+    g_locations = extracted_intervals_seq[:,:,2]
+    a_locations = extracted_intervals_seq[:,:,0]
+    t_locations = extracted_intervals_seq[:,:,3]
+
+    c_meth = np.expand_dims(c_locations*extracted_intervals_Cmeth,axis=-1)
+    g_meth = np.expand_dims(g_locations*extracted_intervals_Cmeth,axis=-1)
+    a_meth = np.expand_dims(a_locations*extracted_intervals_Ameth,axis=-1)
+    t_meth = np.expand_dims(t_locations*extracted_intervals_Ameth,axis=-1)
+    seq_meth_input = np.concatenate([a_meth,c_meth,extracted_intervals_seq,g_meth,t_meth],axis=-1)    #shape should be (batch_size,1000,6). This is the same order as the input is fed to the neural net
+    #Get the conv layer from the name
+    try:
+        conv_layer = model.get_layer(conv_layer_name).get_weights()
+    except Exception as e:
+        print(e)
+        return
+    filters,biases = conv_layer[0],conv_layer[1]
+    assert seq_meth_input.shape[2] == filters.shape[2]   #Number of bases must match. Should be = 6
+    print("Reshaping Intervals and filters to use tf.nn.conv2D")
+    seq_meth_intervals_reshape = np.expand_dims(seq_meth_input.transpose((0,2,1)),axis=-1)
+    filters_reshape = filters.transpose((2,0,1,3))
+    pfm_counts = get_counts_list(intervals=seq_meth_intervals_reshape,filters=filters_reshape,biases=biases)
+    info_matrices = information_matrix_pwms(pfm_counts)
+    if savedir:
+        save_pfm_counts(pfm_counts,savedir)
+        save_info_matrices(info_matrices,savedir) 
+    return pfm_counts,info_matrices
+
 def save_pfm_counts(counts_list,filepath):
     counts = []
     for i,item in enumerate(counts_list):
