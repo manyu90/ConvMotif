@@ -179,14 +179,14 @@ VOCABS = {"DNA": OrderedDict([("A", "green"),
                           ("G", "red"),
                           ("T", "green"),
                           ("F", "purple")]),
-         'Meth_8_channel': OrderedDict([("E", "green"),
-                          ("G", "blue"),
+         'Meth_8_channel': OrderedDict([("X", "green"),
+                          ("E", "blue"),
                           ("A", "orange"),
                           ("C", "red"),
                           ("G", "black"),
                           ("T", "purple"),
-			  ("H", "pink"),
-			  ("F", "yellow")])
+			  ("F", "pink"),
+			  ("Y", "yellow")])
          
  }
 # make sure things are in order
