@@ -17,9 +17,11 @@ from genomelake.extractors import ArrayExtractor
 import keras.backend as K
 from plot import seqlogo_fig
 import glob
-from keras.models import import model_from_yaml
+from keras.models import model_from_yaml
 from pybedtools import BedTool
 import json
+import pandas as pd
+
 
 DEFER_DELETE_SIZE=int(250 * 1e6)
 def create_tensorflow_session(visiblegpus):
@@ -282,7 +284,6 @@ def pfm_counts_pipeline_seq_A_meth_models(intervals_bedtool,genome_path,A_methyl
     extracted_intervals_Ameth = A_meth_extractor(intervals_list)
 
     assert extracted_intervals_seq.shape[0] == num_intervals
-    assert extracted_intervals_Cmeth.shape[0] == num_intervals 
     assert extracted_intervals_Ameth.shape[0] == num_intervals  
     #Add in the steps to extract stranded methylation from this and generate the 8 channel intervals
     a_locations = extracted_intervals_seq[:,:,0]
@@ -353,7 +354,7 @@ Filters the set of intervals to create a set of positive intervals
 def filter_positive_test_intervals(path_to_intervals_file,path_to_labels,test_chroms_list,path_to_positive_intervals):
     intervals_dataframe = pd.read_csv(path_to_intervals_file,sep = '\t',names=['chr','start','end','labels'])
     labels = np.load(path_to_labels)
-    intervals_dataframe['labels'] = label
+    intervals_dataframe['labels'] = labels
     filtered_pos_dataframe = intervals_dataframe.loc[intervals_dataframe['chr'].isin(test_chroms_list) & intervals_dataframe['labels']==1]
     filtered_pos_dataframe.to_csv(path_to_positive_intervals,sep='\t',header=False,index=False)
     print("Wrote to {}".format(path_to_positive_intervals))
@@ -363,18 +364,20 @@ def filter_positive_test_intervals(path_to_intervals_file,path_to_labels,test_ch
 This takes in the intervals file and runs the appropriate pipeline for methylation motifs on ALL the positive intervals from the test chromosomes
 This needs to be augmented/ or a new function needs to be defined which only will detect motifs on highly methylated intervals and all intervals
 """
-def run_pipeline_with_all_pos_intervals(path_to_modelspec,path_to_model_arch,path_to_model_weights,path_to_intervals_file,path_to_labels,test_chroms_list,savedir=None,datasetspec_file,path_to_pos_intervals=None):
+def run_pipeline_with_all_pos_intervals(path_to_modelspec,path_to_model_arch,path_to_model_weights,path_to_intervals_file,path_to_labels,test_chroms_list,datasetspec_file,savedir=None,path_to_pos_intervals=None,path_to_memmapped_data=''):
     print('Loading model \n')
-    with open(path_to_seq_arch,'r') as f:
+    with open(path_to_model_arch,'r') as f:
         model = model_from_yaml(f)
     model.load_weights(path_to_model_weights)
     if not path_to_pos_intervals:
-        os.makedirs('./tmp_intervals/')
+        #Create a tmp folder that we will delete later
+        if not os.path.exists('./tmp_intervals'):
+            os.makedirs('./tmp_intervals/')
         path_to_pos_intervals = './tmp_intervals/pos_intervals.bed'
     #Create the filtered pos intervals set
     print("Creating positive intervals set\n")
-    filter_positive_test_intervals(path_to_intervals_file,path_to_labels,test_chroms_list,path_to_positive_intervals)
-    pos_intervals_bedtool = BedTool(path_to_positive_intervals) 
+    filter_positive_test_intervals(path_to_intervals_file,path_to_labels,test_chroms_list,path_to_pos_intervals)
+    pos_intervals_bedtool = BedTool(path_to_pos_intervals) 
     num_intervals = len(pos_intervals_bedtool)
     #Load the datasetspec to get the data sources
     with open(datasetspec_file,'r') as f:
@@ -384,19 +387,35 @@ def run_pipeline_with_all_pos_intervals(path_to_modelspec,path_to_model_arch,pat
     with open(path_to_modelspec,'r') as f:
         model_name = json.load(f)['model_class']
     
-    path_to_genome_bcolz = data_sources['genome_data_dir']
-    path_to_C_methylation_bcolz = data_sources['methylation_data_dir']
-    path_to_A_methylation_bcolz = data_sources['A_methylation_data_dir']
-    ##Dictionary of commands to run depending on the model type
-    commands_dict = {'SequenceReverseComplementClassifier':pfm_counts_pipeline_seq_models(pos_intervals_bedtool,path_to_genome_bcolz,model,num_intervals=num_intervals,savedir=savedir) ,
-            'SequenceMethylationReverseComplementClassifier':pfm_counts_pipeline_seq_meth_5mC_models(pos_intervals_bedtool,path_to_genome_bcolz,path_to_C_methylation_bcolz,model,num_intervals = num_intervals,savedir = savedir),
-            'SequenceA_MethylationReverseComplementClassifier':pfm_counts_pipeline_seq_A_meth_models(pos_intervals_bedtool,path_to_genome_bcolz,path_to_A_methylation_bcolz,model,num_intervals = num_intervals, savedir = savedir),  
-            'SequenceACMethylationReverseComplementClassifier':pfm_counts_pipeline_seq_AC_meth_models(pos_intervals_bedtool,path_to_genome_bcolz,path_to_C_methylation_bcolz,path_to_A_methylation_bcolz,model,num_intervals = num_intervals,savedir = savedir) 
-        }   
+    path_to_genome_bcolz = path_to_memmapped_data+data_sources['genome_data_dir']
+    path_to_C_methylation_bcolz = path_to_memmapped_data+data_sources['methylation_data_dir']
+    path_to_A_methylation_bcolz = path_to_memmapped_data+data_sources['A_methylation_data_dir']
+   
+   
+   ##Dictionary of commands to run depending on the model type
+   
+   
+    command_funcs = {
+             'SequenceReverseComplementClassifier':pfm_counts_pipeline_seq_models,
+             'SequenceMethylationReverseComplementClassifier':pfm_counts_pipeline_seq_meth_5mC_models,
+             'SequenceA_MethylationReverseComplementClassifier':pfm_counts_pipeline_seq_A_meth_models,
+             'SequenceACMethylationReverseComplementClassifier':pfm_counts_pipeline_seq_AC_meth_models
+             }
+
     
     ##Run the command corresponding to the model name
-    assert model_name in commands_dict
-    commands_dict[model_name]
+    assert model_name in command_funcs
+
+    if model_name == 'SequenceReverseComplementClassifier':
+        command_funcs['SequenceReverseComplementClassifier'](pos_intervals_bedtool,path_to_genome_bcolz,model,num_intervals=num_intervals,savedir=savedir)
+    if model_name == 'SequenceMethylationReverseComplementClassifier':
+        command_funcs['SequenceMethylationReverseComplementClassifier'](pos_intervals_bedtool,path_to_genome_bcolz,path_to_C_methylation_bcolz,model,num_intervals = num_intervals,savedir = savedir)
+    if model_name == 'SequenceA_MethylationReverseComplementClassifier':
+        command_funcs['SequenceA_MethylationReverseComplementClassifier'](pos_intervals_bedtool,path_to_genome_bcolz,path_to_A_methylation_bcolz,model,num_intervals = num_intervals, savedir = savedir)
+    if model_name =='SequenceACMethylationReverseComplementClassifier':
+        command_funcs['SequenceACMethylationReverseComplementClassifier'](pos_intervals_bedtool,path_to_genome_bcolz,path_to_C_methylation_bcolz,path_to_A_methylation_bcolz,model,num_intervals = num_intervals,savedir = savedir)
+
+
     ##Remove the tmp folder if it got created
     if os.path.exists('./tmp_intervals'):
         shutil.rmtree('./tmp_intervals')
@@ -415,4 +434,8 @@ def get_methylated_intervals():
 def discover_importance_scored_motifs():
     pass
 
-    
+def rank_by_information_content():
+    pass
+
+
+
