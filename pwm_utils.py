@@ -358,9 +358,11 @@ def filter_positive_test_intervals(path_to_intervals_file,path_to_labels,test_ch
     filtered_pos_dataframe = intervals_dataframe.loc[intervals_dataframe['chr'].isin(test_chroms_list) & intervals_dataframe['labels']==1]
     filtered_pos_dataframe.to_csv(path_to_positive_intervals,sep='\t',header=False,index=False)
     print("Wrote to {}".format(path_to_positive_intervals))
-
+    print("Total sequences is {}".format(str(len(filtered_pos_dataframe))))
 """
 Filters the set of intervals to create a set of positive intervals filtered for methylation
+The methylation threshold is arbitrary now, this needs to be fixed. Perhaps choose only the top 5 or 10 percent methylated sites 
+Or have some criterion for estimating where on the methylation levels curve the methylation really picks up
 """
 def filter_positive_test_intervals_for_methylation(path_to_intervals_file,path_to_labels,test_chroms_list,path_to_positive_intervals,path_to_methylation,meth_threshold=3.0):
     def nan_to_zero(arr):
@@ -380,7 +382,7 @@ def filter_positive_test_intervals_for_methylation(path_to_intervals_file,path_t
         start = row['start']          
         end  = row['end']
         try:
-             methcounts = np.sum(nan_to_zero(A_meth_21d_bw.values(chrom,start,end,numpy=True)))
+             methcounts = np.sum(nan_to_zero(bw_methylation.values(chrom,start,end,numpy=True)))
              meth_list.append(methcounts)
         except:
             pass
@@ -394,30 +396,29 @@ def filter_positive_test_intervals_for_methylation(path_to_intervals_file,path_t
             count+=1
         else:
              break
-    pos_intervals.head(n=count).to_csv(path_to_pos_intervals,sep='\t',header=False,index=False)     
+    pos_intervals.head(n=count).to_csv(path_to_positive_intervals,sep='\t',header=False,index=False)     
     print("Wrote to {}".format(path_to_positive_intervals))
+    print("Total sequences is {}".format(str(count)))
 
 
-
-"""This takes in the intervals file and runs the appropriate pipeline for methylation motifs on ALL the positive intervals from the test chromosomes
+"""
+This takes in the intervals file and runs the appropriate pipeline for methylation motifs on ALL the positive intervals from the test chromosomes
 dThis needs to be augmented/ or a new function needs to be defined which only will detect motifs on highly methylated intervals and all intervals
- """
- def run_pipeline_with_all_pos_intervals(path_to_modelspec,path_to_model_arch,path_to_model_weights,path_to_intervals_file,path_to_labels,test_chroms_list,datasetspec_file,savedir=None,path_to_pos_intervals=None,path_to_memmapped_data='',filter_for_methylated_regions=False):
-     print('Loading model \n')
-     with open(path_to_model_arch,'r') as f:
-         model = model_from_yaml(f)
-     model.load_weights(path_to_model_weights)
-     if not path_to_pos_intervals:
+The methylation threshold is arbitrary now..needs to be fixed
+
+"""
+def run_pipeline_with_all_pos_intervals(path_to_modelspec,path_to_model_arch,path_to_model_weights,path_to_intervals_file,path_to_labels,test_chroms_list,datasetspec_file,savedir=None,path_to_pos_intervals=None,path_to_memmapped_data='',path_to_methylation_bigwig = None,meth_threshold = 3.0):
+    print('Loading model \n')
+    with open(path_to_model_arch,'r') as f:
+        model = model_from_yaml(f)
+        model.load_weights(path_to_model_weights)
+    if not path_to_pos_intervals:
         #Create a tmp folder that we will delete later
         if not os.path.exists('./tmp_intervals'):
             os.makedirs('./tmp_intervals/')
         path_to_pos_intervals = './tmp_intervals/pos_intervals.bed'
-    #Create the filtered pos intervals set
-    print("Creating positive intervals set\n")
-    filter_positive_test_intervals(path_to_intervals_file,path_to_labels,test_chroms_list,path_to_pos_intervals)
-    pos_intervals_bedtool = BedTool(path_to_pos_intervals) 
-    num_intervals = len(pos_intervals_bedtool)
     #Load the datasetspec to get the data sources
+    #Create the filtered pos intervals set
     with open(datasetspec_file,'r') as f:
         datasetspec = json.load(f)
     
@@ -428,13 +429,21 @@ dThis needs to be augmented/ or a new function needs to be defined which only wi
     path_to_genome_bcolz = path_to_memmapped_data+data_sources['genome_data_dir']
     path_to_C_methylation_bcolz = path_to_memmapped_data+data_sources['methylation_data_dir']
     path_to_A_methylation_bcolz = path_to_memmapped_data+data_sources['A_methylation_data_dir']
+  
+    #Filter positive set of sequences 
   #####Add the fix to filter only based on criterion for methylated regions or not
-
+    if path_to_methylation_bigwig:
+        filter_positive_test_intervals_for_methylation(path_to_intervals_file,path_to_labels,test_chroms_list,path_to_pos_intervals,path_to_methylation_bigwig,meth_threshold)
+    else:
+        filter_positive_test_intervals(path_to_intervals_file,path_to_labels,test_chroms_list,path_to_pos_intervals)
+    print("Creating positive intervals set\n")
+    pos_intervals_bedtool = BedTool(path_to_pos_intervals) 
+    num_intervals =  len(pos_intervals_bedtool)
 
 
    
-   ##Dictionary of commands to run depending on the model type
-   
+    ##Dictionary of commands to run depending on the model type
+    ##Dictionary of commands to run depending on the model type
    
     command_funcs = {
              'SequenceReverseComplementClassifier':pfm_counts_pipeline_seq_models,
