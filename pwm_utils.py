@@ -428,7 +428,11 @@ def run_pipeline_with_all_pos_intervals(path_to_modelspec,path_to_model_arch,pat
     
     path_to_genome_bcolz = path_to_memmapped_data+data_sources['genome_data_dir']
     path_to_C_methylation_bcolz = path_to_memmapped_data+data_sources['methylation_data_dir']
-    path_to_A_methylation_bcolz = path_to_memmapped_data+data_sources['A_methylation_data_dir']
+    assert(os.path.exists(path_to_genome_bcolz))
+    assert(os.path.exists(path_to_C_methylation_bcolz))
+
+
+#    path_to_A_methylation_bcolz = path_to_memmapped_data+data_sources['A_methylation_data_dir']
   
     #Filter positive set of sequences 
   #####Add the fix to filter only based on criterion for methylated regions or not

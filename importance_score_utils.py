@@ -17,6 +17,9 @@ from copy import deepcopy
 sys.path.insert(0,'/srv/scratch/manyu/NIPS_workshop_tests/motif_analysis/')
 from plot import seqlogo_fig
 
+#Testing sublime
+
+
 
 
 
