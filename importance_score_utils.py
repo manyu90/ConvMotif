@@ -14,7 +14,7 @@ from pybedtools import BedTool
 from genomelake.extractors import ArrayExtractor 
 import pandas as pd
 from copy import deepcopy 
-sys.path.insert(0,'/srv/scratch/manyu/NIPS_workshop_tests/motif_analysis/')
+sys.path.insert(0,os.getcwd())
 from plot import seqlogo_fig
 
 #Testing sublime
