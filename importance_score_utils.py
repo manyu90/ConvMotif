@@ -14,8 +14,8 @@ from pybedtools import BedTool
 from genomelake.extractors import ArrayExtractor 
 import pandas as pd
 from copy import deepcopy 
-sys.path.insert(0,'/srv/scratch/manyu/NIPS_workshop_tests/motif_analysis/')
-from plot import seqlogo_fig
+sys.path.insert(0,os.getcwd())
+from ConvMotif.plot i:mport seqlogo_fig
 
 
 
@@ -88,6 +88,10 @@ def create_pos_intervals_bed(path_to_intervals,path_to_labels,test_chroms,path_t
 
 
 def get_importance_scores(path_to_genome,path_to_methylation,path_to_pos_intervals_file,model):
+    '''
+    Importance scores for a seq-meth model 
+    '''
+
     assert(os.path.exists(path_to_genome))
     assert(os.path.exists(path_to_methylation))
     assert(os.path.exists(path_to_pos_intervals_file))
@@ -118,7 +122,36 @@ def get_importance_scores(path_to_genome,path_to_methylation,path_to_pos_interva
     return scores_dict
 
 
+ def get_importance_scores_seq_only(path_to_genome,path_to_pos_intervals_file,model):
+    '''
+    Returns the importance scores for a seq only model
+    '''
+    assert(os.path.exists(path_to_genome))
+    assert(os.path.exists(path_to_pos_intervals_file))
+    genome_extractor = ArrayExtractor(path_to_genome)
+    pos_intervals_extracted_arr = genome_extractor(BedTool(path_to_pos_intervals_file))
+    pos_intervals_extracted_arr = np.transpose(pos_intervals_extracted_arr,[0,2,1])
     
+    ##Compute gradients with respect to input layers
+    seq_input = model.get_layer('data/genome_data_dir').input
+    logit = K.sum(model.layers[-2].output,axis = 0)
+    logit_grad = K.gradients(logit,[seq_input])
+    logit_gradients_func = K.function([seq_input,K.learning_phase()], logit_grad)
+    grad_seq = logit_gradients_func([pos_intervals_extracted_arr,False])
+    
+    ##input*grad importance scores
+    input_grad_seq = grad_seq*pos_intervals_extracted_arr
+    
+    ##scores_dict
+    raw = {'seq':pos_intervals_extracted_arr}
+    grad = {'seq': grad_seq}
+    input_grad = {'seq':input_grad_seq}
+    scores_dict = {'raw':raw,'grad':grad,'input_grad':input_grad}
+    
+    return scores_dict
+
+
+   
     
 
     
