@@ -15,21 +15,12 @@ from genomelake.extractors import ArrayExtractor
 import pandas as pd
 from copy import deepcopy 
 sys.path.insert(0,os.getcwd())
-from ConvMotif.plot i:mport seqlogo_fig
+from plot import seqlogo_fig
 
 
 
 
 
-
-# In[2]:
-
-# %load_ext autoreload
-# %autoreload 2
-
-# import pwm_utils
-# from pwm_utils import run_pipeline_with_all_pos_intervals
-# from pwm_utils import plot_and_save_information_content_pwms
 
 
 # In[3]:
@@ -88,10 +79,6 @@ def create_pos_intervals_bed(path_to_intervals,path_to_labels,test_chroms,path_t
 
 
 def get_importance_scores(path_to_genome,path_to_methylation,path_to_pos_intervals_file,model):
-    '''
-    Importance scores for a seq-meth model 
-    '''
-
     assert(os.path.exists(path_to_genome))
     assert(os.path.exists(path_to_methylation))
     assert(os.path.exists(path_to_pos_intervals_file))
@@ -122,10 +109,7 @@ def get_importance_scores(path_to_genome,path_to_methylation,path_to_pos_interva
     return scores_dict
 
 
- def get_importance_scores_seq_only(path_to_genome,path_to_pos_intervals_file,model):
-    '''
-    Returns the importance scores for a seq only model
-    '''
+def get_importance_scores_seq_only(path_to_genome,path_to_pos_intervals_file,model):
     assert(os.path.exists(path_to_genome))
     assert(os.path.exists(path_to_pos_intervals_file))
     genome_extractor = ArrayExtractor(path_to_genome)
