@@ -5,7 +5,6 @@ import sys
 import os
 import json
 import numpy as np
-import matplotlib.pyplot as plt
 from keras.models import model_from_yaml,model_from_json
 import pyBigWig
 import tensorflow as tf
@@ -15,30 +14,12 @@ from genomelake.extractors import ArrayExtractor
 import pandas as pd
 from copy import deepcopy 
 sys.path.insert(0,os.getcwd())
-from plot import seqlogo_fig
 
 
 
 
 
 
-
-# In[3]:
-
-#DEFER_DELETE_SIZE=int(250 * 1e6)
-#def create_tensorflow_session(visiblegpus):
-#    os.environ['CUDA_VISIBLE_DEVICES'] = str(visiblegpus)
-#    session_config = tf.ConfigProto()
-#    session_config.gpu_options.deferred_deletion_bytes = DEFER_DELETE_SIZE
-#    session_config.gpu_options.per_process_gpu_memory_fraction = .95
-#    session = tf.Session(config=session_config)
-#    K.set_session(session)
-#    return session
-#
-#sess = create_tensorflow_session(1)
-#
-
-# In[4]:
 
 def load_model(model_arch_path,model_weights_path):
     if 'json' in model_arch_path:
@@ -121,11 +102,11 @@ def get_importance_scores_seq_only(path_to_genome,path_to_pos_intervals_file,mod
     logit = K.sum(model.layers[-2].output,axis = 0)
     logit_grad = K.gradients(logit,[seq_input])
     logit_gradients_func = K.function([seq_input,K.learning_phase()], logit_grad)
-    grad_seq = logit_gradients_func([pos_intervals_extracted_arr,False])
+    grad_seq = logit_gradients_func([pos_intervals_extracted_arr,False]).squeeze()
     
     ##input*grad importance scores
     input_grad_seq = grad_seq*pos_intervals_extracted_arr
-    
+    input_grad_seq = input_grad_seq.squeeze()
     ##scores_dict
     raw = {'seq':pos_intervals_extracted_arr}
     grad = {'seq': grad_seq}
