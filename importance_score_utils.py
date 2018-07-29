@@ -16,8 +16,21 @@ from copy import deepcopy
 sys.path.insert(0,os.getcwd())
 
 
+def batch_iterator(iterable,batch_size=128):
+    it=iter(iterable)
+    try:
+        while True:
+            batch=[]
+            for i in xrange(batch_size):
+                batch.append(next(it))
+            yield batch
+    except StopIteration:
+        yield batch
 
-
+def generate_from_array(array,batch_size=128):
+    batch_iterator_generator = batch_iterator(array,batch_size)
+    for array_batch in batch_iterator_generator:
+        yield np.stack(array_batch, axis=0)
 
 
 
@@ -102,11 +115,13 @@ def get_importance_scores_seq_only(path_to_genome,path_to_pos_intervals_file,mod
     logit = K.sum(model.layers[-2].output,axis = 0)
     logit_grad = K.gradients(logit,[seq_input])
     logit_gradients_func = K.function([seq_input,K.learning_phase()], logit_grad)
-    grad_seq = logit_gradients_func([pos_intervals_extracted_arr,False]).squeeze()
+    grads_list = []
+    for batch_extracted in generate_from_array(pos_intervals_extracted_arr):
+        grads_list.append(np.array(logit_gradients_func([batch_extracted,False])).squeeze())
+    grad_seq = np.vstack(grads_list)    
     
     ##input*grad importance scores
     input_grad_seq = grad_seq*pos_intervals_extracted_arr
-    input_grad_seq = input_grad_seq.squeeze()
     ##scores_dict
     raw = {'seq':pos_intervals_extracted_arr}
     grad = {'seq': grad_seq}
