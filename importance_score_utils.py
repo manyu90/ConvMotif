@@ -1,6 +1,6 @@
 
 
-
+from itertools import izip
 import sys
 import os
 import json
@@ -88,8 +88,16 @@ def get_importance_scores(path_to_genome,path_to_methylation,path_to_pos_interva
     logit = K.sum(model.layers[-2].output,axis = 0)
     logit_grad = K.gradients(logit,[seq_input,meth_input])
     logit_gradients_func = K.function([seq_input, meth_input,K.learning_phase()], logit_grad)
-    grad_seq,grad_meth = logit_gradients_func([pos_intervals_extracted_arr,methylation,False])
-    
+    #grad_seq,grad_meth = logit_gradients_func([pos_intervals_extracted_arr,methylation,False])
+    grad_seq_list = []
+    grad_meth_list = []
+    for batch_seq,batch_meth  in izip(generate_from_array(pos_intervals_extracted_arr),generate_from_array(methylation)):
+        batch_grad_seq,batch_grad_meth = logit_gradients_func([batch_seq,batch_meth,False])
+        grad_seq_list.append(np.array(batch_grad_seq).squeeze())
+        grad_meth_list.append(np.array(batch_grad_meth).squeeze())
+    grad_seq = np.vstack(grad_seq_list)
+    grad_meth = np.vstack(grad_meth_list)
+  
     ##input*grad importance scores
     input_grad_seq = grad_seq*pos_intervals_extracted_arr
     input_grad_meth  = grad_meth*methylation
