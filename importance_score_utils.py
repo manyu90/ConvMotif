@@ -1,6 +1,11 @@
 
 
-from itertools import izip
+
+try:
+    from itertools import izip as zip
+except ImportError:
+    pass
+
 import sys
 import os
 import json
@@ -16,7 +21,7 @@ from copy import deepcopy
 sys.path.insert(0,os.getcwd())
 
 
-def batch_iterator(iterable,batch_size=128):
+def batch_iterator(iterable,batch_size=50):
     it=iter(iterable)
     try:
         while True:
@@ -27,11 +32,13 @@ def batch_iterator(iterable,batch_size=128):
     except StopIteration:
         yield batch
 
-def generate_from_array(array,batch_size=128):
+def generate_from_array(array,batch_size=50):
     batch_iterator_generator = batch_iterator(array,batch_size)
     for array_batch in batch_iterator_generator:
-        yield np.stack(array_batch, axis=0)
-
+        try:
+            yield np.stack(array_batch, axis=0)
+        except:
+            pass
 
 
 def load_model(model_arch_path,model_weights_path):
@@ -91,7 +98,7 @@ def get_importance_scores(path_to_genome,path_to_methylation,path_to_pos_interva
     #grad_seq,grad_meth = logit_gradients_func([pos_intervals_extracted_arr,methylation,False])
     grad_seq_list = []
     grad_meth_list = []
-    for batch_seq,batch_meth  in izip(generate_from_array(pos_intervals_extracted_arr),generate_from_array(methylation)):
+    for batch_seq,batch_meth  in zip(generate_from_array(pos_intervals_extracted_arr),generate_from_array(methylation)):
         batch_grad_seq,batch_grad_meth = logit_gradients_func([batch_seq,batch_meth,False])
         grad_seq_list.append(np.array(batch_grad_seq).squeeze())
         grad_meth_list.append(np.array(batch_grad_meth).squeeze())
@@ -124,8 +131,13 @@ def get_importance_scores_seq_only(path_to_genome,path_to_pos_intervals_file,mod
     logit_grad = K.gradients(logit,[seq_input])
     logit_gradients_func = K.function([seq_input,K.learning_phase()], logit_grad)
     grads_list = []
-    for batch_extracted in generate_from_array(pos_intervals_extracted_arr):
-        grads_list.append(np.array(logit_gradients_func([batch_extracted,False])).squeeze())
+    for batch_extracted in generate_from_array(pos_intervals_extracted_arr,batch_size=128):
+        
+        arr = np.array(logit_gradients_func([batch_extracted,False])).squeeze()
+        if len(arr.shape)==2:
+            arr = np.expand_dims(arr,0)
+        grads_list.append(arr)
+    
     grad_seq = np.vstack(grads_list)    
     
     ##input*grad importance scores
